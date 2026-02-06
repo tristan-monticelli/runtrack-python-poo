@@ -1,0 +1,536 @@
+"""Job7 - Blackjack RE7"""
+import random
+import os
+
+def clear():
+    os.system("clear")
+
+
+# ============================================================
+# A. CARTE - Numerotees de 1 a 11 (deck unique de 11 cartes)
+# ============================================================
+class Carte():
+    def __init__(self, valeur):
+        self.__valeur = valeur
+        self.__visible = False
+
+    def getValeur(self):
+        return self.__valeur
+
+    def estVisible(self):
+        return self.__visible
+
+    def retourner(self):
+        self.__visible = not self.__visible
+
+    def __str__(self):
+        if self.__visible:
+            return f"[{self.__valeur}]"
+        return "[???]"
+
+
+# ============================================================
+# B. TRUMP CARD - Les vraies trump cards de RE7
+# ============================================================
+class TrumpCard():
+    def __init__(self, nom, description, effet, valeur=0):
+        self.__nom = nom
+        self.__description = description
+        self.__effet = effet
+        self.__valeur = valeur
+
+    def getNom(self):
+        return self.__nom
+
+    def getDescription(self):
+        return self.__description
+
+    def getEffet(self):
+        return self.__effet
+
+    def getValeur(self):
+        return self.__valeur
+
+    def appliquerEffet(self, joueur, adversaire, jeu=None):
+        if self.__effet == "nombre":
+            carte = Carte(self.__valeur)
+            carte.retourner()
+            joueur.ajouterCarte(carte)
+            joueur.calculerScore()
+            print(f"  +{self.__valeur} ajoute a ta main !")
+        elif self.__effet == "destroy":
+            if adversaire.getShield():
+                adversaire.setShield(False)
+                print("  Shield de l'adversaire detruit !")
+            else:
+                print("  L'adversaire n'a aucun effet actif a detruire")
+        elif self.__effet == "shield":
+            joueur.setShield(True)
+            print("  Shield actif ! Tu ne perds pas de doigt si tu perds ce tour")
+        elif self.__effet == "return":
+            carte = joueur.retirerDerniereCarte()
+            if carte and jeu:
+                jeu.remettreCarte(carte)
+                nouvelleCarte = jeu.piocherCarte()
+                nouvelleCarte.retourner()
+                joueur.ajouterCarte(nouvelleCarte)
+                joueur.calculerScore()
+                print(f"  Carte remplacee ! Nouvelle carte : {nouvelleCarte}")
+            else:
+                print("  Pas de carte a echanger")
+
+    def __str__(self):
+        return f"{self.__nom} : {self.__description}"
+
+    def trumpAleatoire(self):
+        trumps = [
+            TrumpCard("1 Card", "Ajouter 1 a ta main", "nombre", 1),
+            TrumpCard("2 Card", "Ajouter 2 a ta main", "nombre", 2),
+            TrumpCard("3 Card", "Ajouter 3 a ta main", "nombre", 3),
+            TrumpCard("4 Card", "Ajouter 4 a ta main", "nombre", 4),
+            TrumpCard("5 Card", "Ajouter 5 a ta main", "nombre", 5),
+            TrumpCard("Destroy", "Detruire l'effet actif de l'adversaire", "destroy"),
+            TrumpCard("Shield", "Te proteger de la perte d'un doigt", "shield"),
+            TrumpCard("Return", "Echanger ta derniere carte contre une nouvelle", "return"),
+        ]
+        return random.choice(trumps)
+
+
+# ============================================================
+# C. PERSONNAGE - Classe parent (heritage)
+#    Contient tout le code commun a Joueur et Adversaire
+# ============================================================
+class Personnage():
+    def __init__(self):
+        self._main = []
+        self._score = 0
+        self._doigts = 10
+        self._aStand = False
+        self._aBuste = False
+        self._trumpCards = []
+        self._maxTrumpCards = 3
+        self._trumpUtilisee = False
+        self._shield = False
+
+    def ajouterCarte(self, carte):
+        self._main.append(carte)
+
+    def retirerDerniereCarte(self):
+        if len(self._main) > 0:
+            carte = self._main.pop()
+            self.calculerScore()
+            return carte
+        return None
+
+    def calculerScore(self):
+        self._score = 0
+        for carte in self._main:
+            self._score += carte.getValeur()
+
+    def verifierBuste(self):
+        if self._score > 21:
+            self._aBuste = True
+
+    def hit(self, jeu):
+        carte = jeu.piocherCarte()
+        carte.retourner()
+        self.ajouterCarte(carte)
+        self.calculerScore()
+        self.verifierBuste()
+        if random.random() < 0.3:
+            generateur = TrumpCard("", "", "")
+            trump = generateur.trumpAleatoire()
+            self.ajouterTrump(trump)
+            return trump
+        return None
+
+    def stand(self):
+        self._aStand = True
+
+    def viderMain(self):
+        cartes = self._main.copy()
+        self._main = []
+        self._score = 0
+        self._aStand = False
+        self._aBuste = False
+        self._trumpUtilisee = False
+        self._shield = False
+        return cartes
+
+    def perdreDoigt(self):
+        if not self._shield:
+            self._doigts -= 1
+            if self._doigts < 0:
+                self._doigts = 0
+            return True
+        else:
+            self._shield = False
+            return False
+
+    def estVivant(self):
+        return self._doigts > 0
+
+    def getScore(self):
+        return self._score
+
+    def getDoigts(self):
+        return self._doigts
+
+    def getAStand(self):
+        return self._aStand
+
+    def getABuste(self):
+        return self._aBuste
+
+    def getShield(self):
+        return self._shield
+
+    def setShield(self, val):
+        self._shield = val
+
+    def ajouterTrump(self, trump):
+        if len(self._trumpCards) < self._maxTrumpCards:
+            self._trumpCards.append(trump)
+
+    def utiliserTrump(self, index, adversaire, jeu=None):
+        trump = self._trumpCards.pop(index)
+        trump.appliquerEffet(self, adversaire, jeu)
+        self._trumpUtilisee = True
+
+    def getTrumpCards(self):
+        return self._trumpCards
+
+    def getTrumpUtilisee(self):
+        return self._trumpUtilisee
+
+    def afficherMain(self):
+        numero = 1
+        for carte in self._main:
+            print(f"  {numero}. {carte}")
+            numero += 1
+        print(f"  Score : {self._score}")
+
+    def afficherTrumps(self):
+        if len(self._trumpCards) == 0:
+            print("  Aucune trump card")
+        else:
+            numero = 1
+            for trump in self._trumpCards:
+                print(f"  {numero}. {trump}")
+                numero += 1
+
+
+# ============================================================
+# D. JOUEUR - Herite de Personnage (joueur humain)
+#    Utilise super().__init__() pour heriter des attributs
+# ============================================================
+class Joueur(Personnage):
+    def __init__(self):
+        super().__init__()
+
+    def hit(self, jeu):
+        trump = super().hit(jeu)
+        if trump:
+            print(f"  Trump Card obtenue : {trump.getNom()} !")
+
+
+# ============================================================
+# E. ADVERSAIRE - Herite de Personnage (bot IA)
+#    Surcharge afficherMain() pour cacher les cartes
+#    Ajoute jouerIA() specifique au bot
+# ============================================================
+class Adversaire(Personnage):
+    def __init__(self):
+        super().__init__()
+
+    def jouerIA(self, jeu):
+        # L'adversaire pioche tant que son score est en dessous de 17
+        while not self._aStand and not self._aBuste:
+            if self._score < 17:
+                self.hit(jeu)
+            else:
+                self.stand()
+        # Si il a buste et qu'il a un Shield, il l'utilise
+        if not self._trumpUtilisee and len(self._trumpCards) > 0:
+            index = 0
+            while index < len(self._trumpCards):
+                if self._trumpCards[index].getEffet() == "shield" and self._aBuste:
+                    self.utiliserTrump(index, None, jeu)
+                    break
+                index += 1
+
+    def afficherMain(self, cachee=True):
+        if cachee:
+            if len(self._main) > 0:
+                self._main[0].retourner()
+                print(f"  1. {self._main[0]}")
+                numero = 2
+                while numero <= len(self._main):
+                    print(f"  {numero}. [???]")
+                    numero += 1
+            print(f"  Score : ???")
+        else:
+            numero = 1
+            for carte in self._main:
+                if not carte.estVisible():
+                    carte.retourner()
+                print(f"  {numero}. {carte}")
+                numero += 1
+            print(f"  Score : {self._score}")
+
+
+# ============================================================
+# F. JEU - Deck de 11 cartes (1-11), mises, doigts
+# ============================================================
+class Jeu():
+    def __init__(self, joueur, adversaire):
+        self.__pileCarte = []
+        self.__manche = 1
+        self.__joueur = joueur
+        self.__adversaire = adversaire
+
+    def creerPile(self):
+        self.__pileCarte = []
+        for i in range(1, 12):
+            self.__pileCarte.append(Carte(i))
+
+    def melangerPile(self):
+        random.shuffle(self.__pileCarte)
+
+    def piocherCarte(self):
+        if len(self.__pileCarte) == 0:
+            self.creerPile()
+            self.melangerPile()
+        return self.__pileCarte.pop()
+
+    def remettreCarte(self, carte):
+        nouvelleCarte = Carte(carte.getValeur())
+        self.__pileCarte.append(nouvelleCarte)
+        random.shuffle(self.__pileCarte)
+
+    def distribuerCartes(self):
+        for _ in range(2):
+            carte = self.piocherCarte()
+            carte.retourner()
+            self.__joueur.ajouterCarte(carte)
+            carte2 = self.piocherCarte()
+            self.__adversaire.ajouterCarte(carte2)
+        self.__joueur.calculerScore()
+        self.__adversaire.calculerScore()
+
+    def determinerGagnant(self):
+        scoreJ = self.__joueur.getScore()
+        scoreA = self.__adversaire.getScore()
+        busteJ = self.__joueur.getABuste()
+        busteA = self.__adversaire.getABuste()
+        if busteJ and busteA:
+            if scoreJ < scoreA:
+                return "joueur"
+            elif scoreA < scoreJ:
+                return "adversaire"
+            return "egalite"
+        if busteJ:
+            return "adversaire"
+        if busteA:
+            return "joueur"
+        if scoreJ > scoreA:
+            return "joueur"
+        if scoreA > scoreJ:
+            return "adversaire"
+        return "egalite"
+
+    def appliquerResultat(self):
+        self.__adversaire.afficherMain(cachee=False)
+        gagnant = self.determinerGagnant()
+        if gagnant == "joueur":
+            perdu = self.__adversaire.perdreDoigt()
+            if perdu:
+                print(f"  Tu gagnes ! L'adversaire perd 1 doigt")
+            else:
+                print(f"  Tu gagnes ! Mais le Shield protege l'adversaire")
+        elif gagnant == "adversaire":
+            perdu = self.__joueur.perdreDoigt()
+            if perdu:
+                print(f"  Tu perds... Tu perds 1 doigt")
+            else:
+                print(f"  Tu perds... Mais ton Shield te protege !")
+        else:
+            self.__joueur.perdreDoigt()
+            self.__adversaire.perdreDoigt()
+            print("  Egalite ! Les deux perdent 1 doigt")
+
+    def reinitialiserManche(self):
+        self.__joueur.viderMain()
+        self.__adversaire.viderMain()
+        self.creerPile()
+        self.melangerPile()
+
+    def mancheSuivante(self):
+        self.__manche += 1
+
+    def verifierFinPartie(self):
+        if not self.__joueur.estVivant():
+            return True
+        if not self.__adversaire.estVivant():
+            return True
+        return False
+
+    def getManche(self):
+        return self.__manche
+
+    def getJoueur(self):
+        return self.__joueur
+
+    def getAdversaire(self):
+        return self.__adversaire
+
+    def afficherPlateau(self):
+        print(f"\n{'='*40}")
+        print(f"  Manche {self.__manche}  |  1 doigt en jeu")
+        doigtsJ = self.__joueur.getDoigts()
+        doigtsA = self.__adversaire.getDoigts()
+        print(f"  Tes doigts : {'|' * doigtsJ} ({doigtsJ})")
+        print(f"  Ses doigts : {'|' * doigtsA} ({doigtsA})")
+        print(f"{'='*40}")
+        print("--- Ta main ---")
+        self.__joueur.afficherMain()
+        print("--- Main adversaire ---")
+        self.__adversaire.afficherMain(cachee=True)
+
+
+# ============================================================
+# G. MENU - Navigation (menus, choix, retour arriere)
+# ============================================================
+class Menu():
+    def __init__(self, jeu):
+        self.__jeu = jeu
+        self.__enCours = True
+
+    def menuPrincipal(self):
+        while self.__enCours:
+            clear()
+            print("="*40)
+            print("  21 - Resident Evil 7")
+            print("  Manche des doigts")
+            print("="*40)
+            print("1. Nouvelle partie")
+            print("2. Regles")
+            print("3. Quitter")
+            choix = input("Ton choix : ")
+            if choix == "1":
+                self.lancerPartie()
+            elif choix == "2":
+                self.afficherRegles()
+            elif choix == "3":
+                self.__enCours = False
+                clear()
+                print("A bientot !")
+            else:
+                print("Choix invalide")
+
+    def menuTour(self):
+        joueur = self.__jeu.getJoueur()
+        while not joueur.getAStand() and not joueur.getABuste():
+            clear()
+            self.__jeu.afficherPlateau()
+            if joueur.getShield():
+                print("\n  [Shield actif]")
+            print("\n1. Hit (piocher)")
+            print("2. Stand (rester)")
+            print("3. Trump Cards")
+            choix = input("Ton choix : ")
+            if choix == "1":
+                joueur.hit(self.__jeu)
+                if joueur.getABuste():
+                    print(f"\n  BUST ! Ton score depasse 21 ({joueur.getScore()})")
+                    input("  Appuie sur Entree...")
+            elif choix == "2":
+                joueur.stand()
+            elif choix == "3":
+                self.menuTrump()
+            else:
+                print("Choix invalide")
+
+    def menuTrump(self):
+        joueur = self.__jeu.getJoueur()
+        adversaire = self.__jeu.getAdversaire()
+        while True:
+            clear()
+            print("--- Tes Trump Cards ---")
+            joueur.afficherTrumps()
+            if joueur.getTrumpUtilisee():
+                print("\n  (Trump deja utilisee ce tour)")
+            print("\n  Choisis un numero pour utiliser une trump")
+            print("0. Retour")
+            choix = input("Ton choix : ")
+            if choix == "0":
+                return
+            elif not joueur.getTrumpUtilisee() and choix.isdigit() and 1 <= int(choix) <= len(joueur.getTrumpCards()):
+                joueur.utiliserTrump(int(choix) - 1, adversaire, self.__jeu)
+                input("  Appuie sur Entree...")
+                return
+            else:
+                print("Choix invalide")
+                input("  Appuie sur Entree...")
+
+    def lancerPartie(self):
+        self.__jeu.creerPile()
+        self.__jeu.melangerPile()
+        while not self.__jeu.verifierFinPartie():
+            clear()
+            self.__jeu.distribuerCartes()
+            self.menuTour()
+            adversaire = self.__jeu.getAdversaire()
+            joueur = self.__jeu.getJoueur()
+            clear()
+            print("\n  L'adversaire joue...")
+            adversaire.jouerIA(self.__jeu)
+            print("\n--- Resultat de la manche ---")
+            print(f"  Ton score : {joueur.getScore()}")
+            self.__jeu.appliquerResultat()
+            input("\n  Appuie sur Entree pour continuer...")
+            self.__jeu.reinitialiserManche()
+            self.__jeu.mancheSuivante()
+        clear()
+        print("="*40)
+        print("  FIN DE PARTIE")
+        print("="*40)
+        doigtsJ = self.__jeu.getJoueur().getDoigts()
+        doigtsA = self.__jeu.getAdversaire().getDoigts()
+        print(f"  Tes doigts : {'|' * doigtsJ} ({doigtsJ})")
+        print(f"  Ses doigts : {'|' * doigtsA} ({doigtsA})")
+        if doigtsJ > doigtsA:
+            print("\n  Tu as survecu !")
+        else:
+            print("\n  Tu as perdu tous tes doigts...")
+        input("\n  Appuie sur Entree pour revenir au menu...")
+
+    def afficherRegles(self):
+        clear()
+        print("="*40)
+        print("  REGLES DU 21 - Manche des doigts")
+        print("="*40)
+        print("\n  Le jeu :")
+        print("  - Deck de 11 cartes (1 a 11), partage")
+        print("  - Approche-toi de 21 sans depasser")
+        print("  - Le perdant perd 1 doigt")
+        print("  - Egalite = les deux perdent 1 doigt")
+        print("  - 1 doigt en jeu par manche")
+        print("\n  Trump Cards :")
+        print("  - Obtenues aleatoirement en piochant")
+        print("  - 1 trump utilisable par tour")
+        print("  - 1-5 Card : ajoute ce nombre a ta main")
+        print("  - Destroy : detruit l'effet actif adverse")
+        print("  - Shield : te protege de la perte d'un doigt")
+        print("  - Return : echange ta derniere carte")
+        input("\n  Appuie sur Entree pour revenir au menu...")
+
+
+# ============================================================
+# H. LANCEMENT - Creer les objets et demarrer
+# ============================================================
+joueur = Joueur()
+adversaire = Adversaire()
+jeu = Jeu(joueur, adversaire)
+menu = Menu(jeu)
+menu.menuPrincipal()
