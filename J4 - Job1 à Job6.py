@@ -133,7 +133,7 @@
 #         self.__prix = prix
 
 #     def infoVehicule(self):
-#         print(f"marque : {self.__marque}\nmodèle : {self.__modele}\nannée : {self.__annee}\nprix : {self.__prix}")
+        # print(f"marque : {self.__marque}\nmodèle : {self.__modele}\nannée : {self.__annee}\nprix : {self.__prix}")
 
 #     def Démarrer(self):
 #         print("attention je roule")
